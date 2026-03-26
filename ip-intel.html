@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MK:// IP INTELLIGENCE</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --pink:#ff2d78;--cyan:#00f5ff;--purple:#b060ff;--yellow:#ffe600;
+  --green:#39ff14;--red:#ff3333;--orange:#ff8c00;
+  --bg:#07020f;--bg2:#0d0520;--surface:rgba(13,5,32,0.92);
+  --dim:#2a1a40;--muted:#6b5080;--text:#e8e0f0;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:15px;line-height:1.6;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;z-index:1000;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px)}
+body::after{content:'';position:fixed;inset:0;z-index:999;pointer-events:none;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.5) 100%)}
+#bg-canvas{position:fixed;inset:0;z-index:0}
+#app{position:relative;z-index:10;max-width:960px;margin:0 auto;padding:0 20px 80px}
+
+/* ── HEADER ── */
+#header{padding:28px 0 24px;border-bottom:1px solid var(--dim);margin-bottom:28px}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.brand{font-family:'Orbitron',monospace;font-weight:900;font-size:14px;color:var(--cyan);letter-spacing:.2em;text-shadow:0 0 12px var(--cyan);animation:glitch 6s infinite}
+.brand span{color:var(--pink)}
+@keyframes glitch{0%,90%,100%{text-shadow:0 0 12px var(--cyan)}92%{text-shadow:3px 0 var(--pink),-3px 0 var(--cyan);transform:translate(-1px)}94%{text-shadow:-3px 0 var(--pink),3px 0 var(--purple);transform:translate(1px)}96%{text-shadow:0 0 12px var(--cyan);transform:translate(0)}}
+.hlinks{display:flex;gap:10px;flex-wrap:wrap}
+.hlink{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.12em;padding:3px 10px;border:1px solid rgba(176,96,255,.4);color:var(--purple);text-decoration:none;transition:all .2s}
+.hlink:hover{border-color:var(--purple);box-shadow:0 0 8px rgba(176,96,255,.3)}
+
+/* Search */
+.search-wrap{position:relative;margin-bottom:14px}
+.search-wrap::before{content:'⌖';position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--pink);pointer-events:none;z-index:1}
+#ip-input{width:100%;background:rgba(7,2,15,.95);border:1px solid var(--dim);color:var(--cyan);font-family:'Share Tech Mono',monospace;font-size:14px;padding:13px 140px 13px 40px;letter-spacing:.08em;outline:none;transition:border-color .2s}
+#ip-input::placeholder{color:var(--muted)}
+#ip-input:focus{border-color:var(--cyan);box-shadow:0 0 12px rgba(0,245,255,.1)}
+#lookup-btn{position:absolute;right:0;top:0;bottom:0;padding:0 22px;background:linear-gradient(135deg,var(--pink),var(--purple));border:none;color:#fff;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:.15em;cursor:pointer;transition:all .2s}
+#lookup-btn:hover{box-shadow:0 0 20px rgba(255,45,120,.5)}
+#lookup-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* Quick lookups */
+.quick-wrap{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.quick-label{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.15em}
+.quick{font-family:'Share Tech Mono',monospace;font-size:10px;padding:3px 10px;border:1px solid var(--dim);color:var(--muted);background:transparent;cursor:pointer;transition:all .2s}
+.quick:hover{border-color:var(--purple);color:var(--purple)}
+.my-ip-btn{border-color:rgba(0,245,255,.3);color:var(--cyan)}
+.my-ip-btn:hover{border-color:var(--cyan);box-shadow:0 0 8px rgba(0,245,255,.2)}
+
+/* ── RESULT CARD ── */
+#result{display:none}
+
+/* Top intel bar */
+.intel-header{background:var(--surface);border:1px solid var(--dim);padding:20px 24px;margin-bottom:12px;display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start}
+.ih-left{}
+.ih-ip{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:var(--cyan);text-shadow:0 0 12px rgba(0,245,255,.4);letter-spacing:.05em;margin-bottom:4px}
+.ih-org{font-size:14px;color:rgba(232,224,240,.6);margin-bottom:10px;font-family:'Share Tech Mono',monospace}
+.ih-badges{display:flex;gap:8px;flex-wrap:wrap}
+.badge{font-family:'Share Tech Mono',monospace;font-size:10px;padding:3px 10px;letter-spacing:.08em;border:1px solid}
+.badge-geo{border-color:rgba(0,245,255,.3);color:var(--cyan)}
+.badge-asn{border-color:rgba(176,96,255,.3);color:var(--purple)}
+.badge-type{border-color:rgba(255,230,0,.3);color:var(--yellow)}
+.badge-safe{border-color:rgba(57,255,20,.4);color:var(--green)}
+.badge-warn{border-color:rgba(255,140,0,.4);color:var(--orange)}
+.badge-danger{border-color:rgba(255,51,51,.4);color:var(--red)}
+
+/* Abuse score ring */
+.abuse-ring-wrap{text-align:center;flex-shrink:0}
+.abuse-ring{position:relative;width:90px;height:90px}
+.abuse-ring svg{transform:rotate(-90deg)}
+.ar-bg{stroke:var(--dim);fill:none}
+.ar-fill{fill:none;stroke-linecap:round;transition:stroke-dashoffset .8s ease}
+.ar-num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ar-score{font-family:'Orbitron',monospace;font-size:18px;font-weight:900}
+.ar-label{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:.1em;margin-top:2px}
+.abuse-verdict{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.12em;margin-top:6px;padding:2px 8px;border:1px solid;text-align:center}
+
+/* Grid of info sections */
+.intel-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.intel-section{background:var(--surface);border:1px solid var(--dim);padding:16px}
+.is-title{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:.25em;color:var(--pink);border-bottom:1px solid var(--dim);padding-bottom:8px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.is-count{font-size:10px;padding:1px 7px;border:1px solid var(--dim);color:var(--muted)}
+
+/* Data rows */
+.dr{display:grid;grid-template-columns:120px 1fr;gap:6px;padding:5px 0;border-bottom:1px solid rgba(42,26,64,.5);font-family:'Share Tech Mono',monospace;font-size:11px;align-items:baseline}
+.dr:last-child{border-bottom:none}
+.dk{color:var(--muted);letter-spacing:.06em}
+.dv{color:rgba(232,224,240,.8);word-break:break-word}
+.dv.good{color:var(--green)}.dv.warn{color:var(--yellow)}.dv.danger{color:var(--red)}.dv.info{color:var(--cyan)}.dv.purple{color:var(--purple)}
+
+/* Map dot */
+.mini-map{background:var(--surface);border:1px solid var(--dim);padding:16px;margin-bottom:12px;position:relative;overflow:hidden}
+.mm-title{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:.25em;color:var(--pink);margin-bottom:12px}
+#world-canvas{width:100%;height:180px;display:block}
+
+/* Categories */
+.cat-grid{display:flex;flex-wrap:wrap;gap:6px}
+.cat-pill{font-family:'Share Tech Mono',monospace;font-size:10px;padding:3px 10px;border:1px solid rgba(255,51,51,.3);color:var(--red);background:rgba(255,51,51,.05);letter-spacing:.04em}
+.cat-pill.neutral{border-color:rgba(107,80,128,.4);color:var(--muted);background:transparent}
+
+/* Report count bar */
+.report-bar{margin-top:10px}
+.rb-label{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.12em;margin-bottom:4px;display:flex;justify-content:space-between}
+.rb-track{height:4px;background:var(--dim)}
+.rb-fill{height:100%;background:linear-gradient(90deg,var(--orange),var(--red));transition:width .8s ease}
+
+/* Full-width section */
+.intel-full{background:var(--surface);border:1px solid var(--dim);padding:16px;margin-bottom:12px}
+
+/* Blacklist check */
+.bl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px}
+.bl-item{font-family:'Share Tech Mono',monospace;font-size:10px;padding:5px 10px;border:1px solid;letter-spacing:.04em;display:flex;align-items:center;gap:6px}
+.bl-clean{border-color:rgba(57,255,20,.2);color:rgba(57,255,20,.6);background:rgba(57,255,20,.03)}
+.bl-hit{border-color:rgba(255,51,51,.4);color:var(--red);background:rgba(255,51,51,.06)}
+.bl-unknown{border-color:var(--dim);color:var(--muted)}
+.bl-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+
+/* Loading */
+.loading-wrap{text-align:center;padding:50px 20px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.1em}
+.ld-dots span{animation:blink 1.2s step-end infinite}
+.ld-dots span:nth-child(2){animation-delay:.2s}
+.ld-dots span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,100%{opacity:0}50%{opacity:1}}
+
+/* Error */
+.error-wrap{background:rgba(255,51,51,.06);border:1px solid rgba(255,51,51,.3);padding:16px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--red);letter-spacing:.06em}
+
+@media(max-width:640px){
+  .intel-grid{grid-template-columns:1fr}
+  .intel-header{grid-template-columns:1fr}
+  .bl-grid{grid-template-columns:1fr 1fr}
+  .dr{grid-template-columns:100px 1fr}
+}
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div id="app">
+
+  <div id="header">
+    <div class="header-top">
+      <div class="brand">MK<span>://</span> IP INTELLIGENCE</div>
+      <div class="hlinks">
+        <a href="https://nexusfang-tech.github.io" class="hlink">⟵ PORTFOLIO</a>
+        <a href="https://nexusfang-tech.github.io/recon-toolkit" class="hlink">RECON</a>
+        <a href="https://threat-feed.netlify.app" class="hlink" target="_blank">THREAT FEED</a>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <input id="ip-input" type="text" placeholder="Enter IPv4 or IPv6 address..." autocomplete="off" spellcheck="false" />
+      <button id="lookup-btn" onclick="doLookup()">ANALYZE</button>
+    </div>
+
+    <div class="quick-wrap">
+      <span class="quick-label">// EXAMPLES:</span>
+      <button class="quick my-ip-btn" onclick="lookupMyIP()">MY IP</button>
+      <button class="quick" onclick="setIP('8.8.8.8')">8.8.8.8</button>
+      <button class="quick" onclick="setIP('1.1.1.1')">1.1.1.1</button>
+      <button class="quick" onclick="setIP('185.220.101.45')">Tor Exit Node</button>
+      <button class="quick" onclick="setIP('45.33.32.156')">Shodan HQ</button>
+      <button class="quick" onclick="setIP('198.51.100.1')">TEST-NET</button>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+</div>
+
+<script>
+// ── BG CANVAS ──────────────────────────────────────────────────────────────
+const bgC=document.getElementById('bg-canvas'),bgX=bgC.getContext('2d');
+let bgT=0;
+function resizeBg(){bgC.width=window.innerWidth;bgC.height=window.innerHeight}
+resizeBg();window.addEventListener('resize',resizeBg);
+function drawBg(){
+  const W=bgC.width,H=bgC.height;bgX.clearRect(0,0,W,H);
+  const sky=bgX.createLinearGradient(0,0,0,H*.6);sky.addColorStop(0,'#07020f');sky.addColorStop(1,'#0e0028');
+  bgX.fillStyle=sky;bgX.fillRect(0,0,W,H*.6);
+  const gnd=bgX.createLinearGradient(0,H*.6,0,H);gnd.addColorStop(0,'#0d0520');gnd.addColorStop(1,'#07020f');
+  bgX.fillStyle=gnd;bgX.fillRect(0,H*.6,W,H*.4);
+  const hor=H*.58,spd=(bgT*.2)%1;
+  for(let i=0;i<=20;i++){const t=i/20;bgX.beginPath();bgX.moveTo(t*W,H);bgX.lineTo(W/2+(t-.5)*60,hor);bgX.strokeStyle='rgba(176,96,255,.07)';bgX.lineWidth=1;bgX.stroke()}
+  for(let i=0;i<=14;i++){const t=((i/14)+spd)%1,y=hor+(H-hor)*t*t,pw=W*.04+(W*.96)*t*t;bgX.beginPath();bgX.moveTo((W-pw)/2,y);bgX.lineTo((W+pw)/2,y);bgX.strokeStyle=`rgba(0,245,255,${t*.12})`;bgX.lineWidth=1;bgX.stroke()}
+  const hg=bgX.createRadialGradient(W/2,hor,0,W/2,hor,W*.25);
+  hg.addColorStop(0,'rgba(255,45,120,.08)');hg.addColorStop(1,'rgba(176,96,255,0)');
+  bgX.fillStyle=hg;bgX.fillRect(0,hor-40,W,80);
+  bgT+=.012;requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// ── INPUT ──────────────────────────────────────────────────────────────────
+document.getElementById('ip-input').addEventListener('keydown',e=>{if(e.key==='Enter')doLookup()});
+function setIP(ip){document.getElementById('ip-input').value=ip;doLookup()}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// ── ABUSE CATEGORIES ───────────────────────────────────────────────────────
+const ABUSE_CATS={
+  1:'DNS Compromise',2:'DNS Poisoning',3:'Fraud Orders',4:'DDoS Attack',
+  5:'FTP Brute-Force',6:'Ping of Death',7:'Phishing',8:'Fraud VoIP',
+  9:'Open Proxy',10:'Web Spam',11:'Email Spam',12:'Blog Spam',13:'VPN IP',
+  14:'Port Scan',15:'Hacking',16:'SQL Injection',17:'Spoofing',
+  18:'Brute-Force',19:'Bad Web Bot',20:'Exploited Host',21:'Web App Attack',
+  22:'SSH Attack',23:'IoT Targeted'
+};
+
+// ── IP VALIDATION ──────────────────────────────────────────────────────────
+function isValidIP(ip){
+  const v4=/^(\d{1,3}\.){3}\d{1,3}$/;
+  const v6=/^[0-9a-fA-F:]+$/;
+  if(v4.test(ip)) return ip.split('.').every(n=>parseInt(n)<=255);
+  return v6.test(ip)&&ip.includes(':');
+}
+
+function isPrivate(ip){
+  return /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|::1|fc|fd)/.test(ip);
+}
+
+// ── MY IP ──────────────────────────────────────────────────────────────────
+async function lookupMyIP(){
+  try{
+    const r=await fetch('https://api.ipify.org?format=json',{signal:AbortSignal.timeout(5000)});
+    const d=await r.json();
+    document.getElementById('ip-input').value=d.ip;
+    doLookup();
+  }catch(e){
+    document.getElementById('ip-input').value='';
+    alert('Could not detect your IP. Try manually.');
+  }
+}
+
+// ── MAIN LOOKUP ────────────────────────────────────────────────────────────
+async function doLookup(){
+  const ip=document.getElementById('ip-input').value.trim();
+  if(!ip) return;
+  if(!isValidIP(ip)){
+    showError('Invalid IP address format. Enter a valid IPv4 or IPv6 address.');
+    return;
+  }
+
+  document.getElementById('lookup-btn').disabled=true;
+  showLoading(ip);
+
+  const data={ip};
+
+  // Private IP shortcut
+  if(isPrivate(ip)){
+    document.getElementById('lookup-btn').disabled=false;
+    renderPrivate(ip);
+    return;
+  }
+
+  // Fetch all sources in parallel
+  await Promise.allSettled([
+    fetchGeo(ip).then(d=>data.geo=d).catch(()=>{}),
+    fetchAbuse(ip).then(d=>data.abuse=d).catch(()=>{}),
+    fetchRDNS(ip).then(d=>data.rdns=d).catch(()=>{}),
+    fetchASN(ip).then(d=>data.asn=d).catch(()=>{}),
+  ]);
+
+  document.getElementById('lookup-btn').disabled=false;
+  renderResult(data);
+}
+
+// ── DATA SOURCES ───────────────────────────────────────────────────────────
+async function fetchGeo(ip){
+  const r=await fetch(`https://ip-api.com/json/${ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,reverse,mobile,proxy,hosting,query`,{signal:AbortSignal.timeout(8000)});
+  if(!r.ok) throw new Error('geo failed');
+  return await r.json();
+}
+
+async function fetchAbuse(ip){
+  // Route through the threat-feed Netlify proxy which has the AbuseIPDB key
+  // Falls back to no abuse data if proxy unavailable
+  try{
+    const r=await fetch(`https://threat-feed.netlify.app/.netlify/functions/threats`,{signal:AbortSignal.timeout(8000)});
+    // The blacklist endpoint doesn't let us check individual IPs — use check endpoint instead
+    // Since our proxy only exposes the blacklist, we'll use ipwho.is abuse score as proxy
+    throw new Error('use fallback');
+  }catch(e){
+    // Fallback: use ipwho.is which includes abuse scoring
+    const r=await fetch(`https://ipwho.is/${ip}`,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error('abuse failed');
+    return await r.json();
+  }
+}
+
+async function fetchRDNS(ip){
+  // Reverse DNS via Cloudflare DoH
+  const reversed=ip.split('.').reverse().join('.')+'.in-addr.arpa';
+  const r=await fetch(`https://cloudflare-dns.com/dns-query?name=${reversed}&type=PTR`,{headers:{'accept':'application/dns-json'},signal:AbortSignal.timeout(5000)});
+  if(!r.ok) throw new Error('rdns failed');
+  const d=await r.json();
+  return d.Answer?.[0]?.data||null;
+}
+
+async function fetchASN(ip){
+  const r=await fetch(`https://api.bgpview.io/ip/${ip}`,{signal:AbortSignal.timeout(8000)});
+  if(!r.ok) throw new Error('asn failed');
+  return await r.json();
+}
+
+// ── RISK SCORING ───────────────────────────────────────────────────────────
+function computeRisk(data){
+  let score=0;
+  const flags=[];
+
+  if(data.geo?.proxy===true){score+=40;flags.push('PROXY DETECTED')}
+  if(data.geo?.hosting===true){score+=15;flags.push('HOSTING/VPS')}
+  if(data.geo?.mobile===true){flags.push('MOBILE CARRIER')}
+  if(data.abuse?.connection?.type==='Tor'){score+=50;flags.push('TOR EXIT NODE')}
+  if(data.abuse?.threat?.is_tor){score+=50;flags.push('TOR EXIT NODE')}
+  if(data.abuse?.threat?.is_proxy){score+=30;flags.push('KNOWN PROXY')}
+  if(data.abuse?.threat?.is_vpn){score+=20;flags.push('VPN SERVICE')}
+  if(data.abuse?.threat?.is_datacenter){score+=10;flags.push('DATACENTER')}
+  if(data.abuse?.threat?.is_anonymous){score+=25;flags.push('ANONYMOUS')}
+  if(data.abuse?.threat?.is_known_attacker){score+=60;flags.push('KNOWN ATTACKER')}
+  if(data.abuse?.threat?.is_known_abuser){score+=40;flags.push('KNOWN ABUSER')}
+
+  score=Math.min(score,100);
+
+  let level='CLEAN', color='#39ff14';
+  if(score>=70){level='CRITICAL';color='#ff3333'}
+  else if(score>=40){level='SUSPICIOUS';color='#ff8c00'}
+  else if(score>=15){level='MODERATE';color='#ffe600'}
+
+  return{score,level,color,flags};
+}
+
+// ── WORLD MAP ──────────────────────────────────────────────────────────────
+function drawWorldMap(canvasEl, lat, lng){
+  const W=canvasEl.width=canvasEl.offsetWidth*window.devicePixelRatio;
+  const H=canvasEl.height=canvasEl.offsetHeight*window.devicePixelRatio;
+  const ctx=canvasEl.getContext('2d');
+  ctx.scale(window.devicePixelRatio,window.devicePixelRatio);
+  const w=canvasEl.offsetWidth,h=canvasEl.offsetHeight;
+
+  ctx.fillStyle='rgba(7,2,15,0)';ctx.fillRect(0,0,w,h);
+
+  // Simple equirectangular grid
+  ctx.strokeStyle='rgba(42,26,64,0.5)';ctx.lineWidth=0.5;
+  for(let lo=-180;lo<=180;lo+=30){
+    const x=(lo+180)/360*w;
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
+  }
+  for(let la=-90;la<=90;la+=30){
+    const y=(90-la)/180*h;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+  }
+
+  // Horizon line glow
+  ctx.strokeStyle='rgba(255,45,120,0.2)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();
+
+  if(lat===null||lng===null)return;
+
+  // Convert lat/lng to canvas coords
+  const px=(lng+180)/360*w;
+  const py=(90-lat)/180*h;
+
+  // Pulse rings
+  for(let r=4;r<=28;r+=8){
+    const alpha=1-(r/28);
+    ctx.beginPath();
+    ctx.arc(px,py,r,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(255,45,120,${alpha*0.6})`;
+    ctx.lineWidth=1;ctx.stroke();
+  }
+
+  // Center dot
+  ctx.beginPath();ctx.arc(px,py,4,0,Math.PI*2);
+  ctx.fillStyle='#ff2d78';
+  ctx.shadowColor='#ff2d78';ctx.shadowBlur=12;
+  ctx.fill();ctx.shadowBlur=0;
+
+  // Crosshair lines
+  ctx.strokeStyle='rgba(255,45,120,0.3)';ctx.lineWidth=1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,h);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(w,py);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Coord label
+  ctx.fillStyle='rgba(255,45,120,0.7)';
+  ctx.font=`${10*window.devicePixelRatio/window.devicePixelRatio}px 'Share Tech Mono',monospace`;
+  ctx.fillText(`${lat.toFixed(2)}°, ${lng.toFixed(2)}°`,px+8,py-6);
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
+function showLoading(ip){
+  document.getElementById('result').style.display='block';
+  document.getElementById('result').innerHTML=`
+    <div class="loading-wrap">
+      <div style="font-family:'Orbitron',monospace;font-size:14px;color:var(--cyan);margin-bottom:8px">${esc(ip)}</div>
+      <div class="ld-dots">// QUERYING INTELLIGENCE SOURCES<span>.</span><span>.</span><span>.</span></div>
+    </div>`;
+}
+
+function showError(msg){
+  document.getElementById('result').style.display='block';
+  document.getElementById('result').innerHTML=`<div class="error-wrap">// ERROR — ${esc(msg)}</div>`;
+}
+
+function renderPrivate(ip){
+  document.getElementById('result').style.display='block';
+  document.getElementById('result').innerHTML=`
+    <div class="intel-header">
+      <div>
+        <div class="ih-ip">${esc(ip)}</div>
+        <div class="ih-org" style="color:var(--yellow)">PRIVATE / RFC1918 ADDRESS</div>
+        <div class="ih-badges">
+          <span class="badge badge-type">PRIVATE RANGE</span>
+          <span class="badge badge-safe">NOT ROUTABLE</span>
+        </div>
+      </div>
+    </div>
+    <div class="intel-full">
+      <div class="is-title">// PRIVATE ADDRESS RANGES</div>
+      <div class="dr"><span class="dk">10.0.0.0/8</span><span class="dv">Class A private (RFC 1918)</span></div>
+      <div class="dr"><span class="dk">172.16.0.0/12</span><span class="dv">Class B private (RFC 1918)</span></div>
+      <div class="dr"><span class="dk">192.168.0.0/16</span><span class="dv">Class C private (RFC 1918)</span></div>
+      <div class="dr"><span class="dk">127.0.0.0/8</span><span class="dv">Loopback (RFC 5735)</span></div>
+      <div class="dr"><span class="dk">::1</span><span class="dv">IPv6 loopback</span></div>
+    </div>`;
+}
+
+function renderResult(data){
+  const geo=data.geo||{};
+  const abuse=data.abuse||{};
+  const asn=data.asn?.data||{};
+  const risk=computeRisk(data);
+
+  const circ=2*Math.PI*36;
+  const offset=circ-(risk.score/100)*circ;
+
+  // Type badges
+  const typeBadges=[];
+  if(geo.proxy) typeBadges.push('<span class="badge badge-warn">PROXY</span>');
+  if(geo.hosting) typeBadges.push('<span class="badge badge-warn">HOSTING</span>');
+  if(geo.mobile) typeBadges.push('<span class="badge badge-type">MOBILE</span>');
+  if(abuse.connection?.type==='Tor'||abuse.threat?.is_tor) typeBadges.push('<span class="badge badge-danger">TOR</span>');
+  if(!typeBadges.length) typeBadges.push('<span class="badge badge-safe">RESIDENTIAL</span>');
+
+  // Country flag emoji
+  const cc=geo.countryCode||'';
+  const flag=cc?String.fromCodePoint(...[...cc].map(c=>0x1F1E6+c.charCodeAt(0)-65)):' ';
+
+  // ASN prefix info
+  const prefixes=asn.prefixes||[];
+  const asnInfo=asn.rir_allocation||{};
+  const peers=asn.asn?.peers_count||'—';
+
+  let html=`
+  <div class="intel-header">
+    <div class="ih-left">
+      <div class="ih-ip">${esc(data.ip)}</div>
+      <div class="ih-org">${flag} ${esc(geo.org||geo.isp||'Unknown Organization')}</div>
+      <div class="ih-badges">
+        ${geo.country?`<span class="badge badge-geo">${flag} ${esc(geo.city||'')} ${esc(geo.country||'')}</span>`:''}
+        ${geo.as?`<span class="badge badge-asn">${esc(geo.as?.split(' ')[0]||'')}</span>`:''}
+        ${typeBadges.join('')}
+        <span class="badge" style="border-color:${risk.color}40;color:${risk.color}">${risk.level}</span>
+      </div>
+      ${risk.flags.length?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${risk.flags.map(f=>`<span style="font-family:'Share Tech Mono',monospace;font-size:9px;padding:2px 8px;border:1px solid rgba(255,140,0,.4);color:var(--orange);letter-spacing:.08em">${f}</span>`).join('')}</div>`:''}
+    </div>
+    <div class="abuse-ring-wrap">
+      <div class="abuse-ring">
+        <svg width="90" height="90" viewBox="0 0 90 90">
+          <circle class="ar-bg" cx="45" cy="45" r="36" stroke-width="5"/>
+          <circle class="ar-fill" cx="45" cy="45" r="36" stroke-width="5"
+            stroke="${risk.color}"
+            stroke-dasharray="${circ.toFixed(1)}"
+            stroke-dashoffset="${offset.toFixed(1)}"/>
+        </svg>
+        <div class="ar-num">
+          <span class="ar-score" style="color:${risk.color}">${risk.score}</span>
+          <span class="ar-label">RISK</span>
+        </div>
+      </div>
+      <div class="abuse-verdict" style="border-color:${risk.color}60;color:${risk.color}">${risk.level}</div>
+    </div>
+  </div>`;
+
+  // World map
+  html+=`
+  <div class="mini-map">
+    <div class="mm-title">// GEOLOCATION</div>
+    <canvas id="world-canvas"></canvas>
+  </div>`;
+
+  // Two column grid
+  html+=`<div class="intel-grid">`;
+
+  // Geo section
+  html+=`<div class="intel-section">
+    <div class="is-title">// GEOLOCATION</div>
+    ${dr('IP',data.ip,'info')}
+    ${dr('Country',`${flag} ${geo.country||'—'}`)}
+    ${dr('Region',geo.regionName||'—')}
+    ${dr('City',geo.city||'—')}
+    ${dr('ZIP',geo.zip||'—')}
+    ${dr('Coordinates',geo.lat&&geo.lon?`${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}`:'—','info')}
+    ${dr('Timezone',geo.timezone||'—')}
+    ${dr('Reverse DNS',data.rdns||'—','purple')}
+  </div>`;
+
+  // Network section
+  html+=`<div class="intel-section">
+    <div class="is-title">// NETWORK</div>
+    ${dr('ISP',geo.isp||abuse.connection?.isp||'—')}
+    ${dr('Organization',geo.org||'—')}
+    ${dr('AS Number',geo.as?.split(' ')[0]||'—','purple')}
+    ${dr('AS Name',geo.asname||geo.as?.split(' ').slice(1).join(' ')||'—')}
+    ${dr('Type',geo.hosting?'Hosting/VPS':geo.mobile?'Mobile':geo.proxy?'Proxy/VPN':'Residential')}
+    ${dr('Proxy',geo.proxy?'YES':'NO',geo.proxy?'danger':'good')}
+    ${dr('Hosting',geo.hosting?'YES':'NO',geo.hosting?'warn':'')}
+    ${dr('Mobile',geo.mobile?'YES':'NO')}
+  </div>`;
+
+  html+=`</div>`;
+
+  // Threat intel section
+  const threat=abuse.threat||{};
+  const hasTheatData=Object.keys(threat).length>0;
+  html+=`<div class="intel-full">
+    <div class="is-title">// THREAT INTELLIGENCE</div>
+    <div class="intel-grid" style="margin-bottom:0">
+      <div>
+        ${dr('Tor Exit Node',threat.is_tor!==undefined?(threat.is_tor?'YES':'NO'):'Unknown',threat.is_tor?'danger':'')}
+        ${dr('Known Proxy',threat.is_proxy!==undefined?(threat.is_proxy?'YES':'NO'):'Unknown',threat.is_proxy?'danger':'')}
+        ${dr('VPN Service',threat.is_vpn!==undefined?(threat.is_vpn?'YES':'NO'):'Unknown',threat.is_vpn?'warn':'')}
+        ${dr('Datacenter',threat.is_datacenter!==undefined?(threat.is_datacenter?'YES':'NO'):'Unknown')}
+      </div>
+      <div>
+        ${dr('Known Attacker',threat.is_known_attacker!==undefined?(threat.is_known_attacker?'YES':'NO'):'Unknown',threat.is_known_attacker?'danger':'')}
+        ${dr('Known Abuser',threat.is_known_abuser!==undefined?(threat.is_known_abuser?'YES':'NO'):'Unknown',threat.is_known_abuser?'danger':'')}
+        ${dr('Anonymous',threat.is_anonymous!==undefined?(threat.is_anonymous?'YES':'NO'):'Unknown',threat.is_anonymous?'warn':'')}
+        ${dr('Bogon',threat.is_bogon!==undefined?(threat.is_bogon?'YES':'NO'):'Unknown',threat.is_bogon?'warn':'')}
+      </div>
+    </div>
+    ${!hasTheatData?'<div style="margin-top:8px;font-family:\'Share Tech Mono\',monospace;font-size:10px;color:var(--muted)">Detailed threat data requires ipwhois with threat module. Basic geo/proxy flags shown above.</div>':''}
+  </div>`;
+
+  // BGP / ASN detail
+  if(prefixes.length||asnInfo.prefix){
+    html+=`<div class="intel-full">
+      <div class="is-title">// BGP / ROUTING <span class="is-count">${prefixes.length} prefixes</span></div>
+      ${asn.asn?.name?dr('ASN Name',asn.asn.name,'purple'):''}
+      ${asn.asn?.description_short?dr('Description',asn.asn.description_short):''}
+      ${asn.asn?.country_code?dr('Country',asn.asn.country_code):''}
+      ${peers!=='—'?dr('BGP Peers',String(peers)):''}
+      ${prefixes.slice(0,5).map(p=>`
+        <div class="dr">
+          <span class="dk">${esc(p.prefix||'')}</span>
+          <span class="dv purple">${esc(p.name||p.description||'')}</span>
+        </div>`).join('')}
+    </div>`;
+  }
+
+  // Blacklist status (known public blacklists — checked via DNS)
+  html+=`<div class="intel-full">
+    <div class="is-title">// REPUTATION SOURCES</div>
+    <div class="bl-grid" id="bl-grid">
+      <div class="bl-item bl-unknown"><div class="bl-dot"></div>Loading...</div>
+    </div>
+    <div style="margin-top:8px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted)">
+      // DNS-based blacklist checks · <a href="https://www.abuseipdb.com/check/${esc(data.ip)}" target="_blank" style="color:var(--purple)">Check AbuseIPDB ↗</a> · <a href="https://www.virustotal.com/gui/ip-address/${esc(data.ip)}" target="_blank" style="color:var(--purple)">VirusTotal ↗</a> · <a href="https://shodan.io/host/${esc(data.ip)}" target="_blank" style="color:var(--purple)">Shodan ↗</a>
+    </div>
+  </div>`;
+
+  document.getElementById('result').innerHTML=html;
+  document.getElementById('result').style.display='block';
+
+  // Draw map after render
+  requestAnimationFrame(()=>{
+    const cvs=document.getElementById('world-canvas');
+    if(cvs) drawWorldMap(cvs, geo.lat||null, geo.lon||null);
+  });
+
+  // DNS blacklist checks
+  checkBlacklists(data.ip);
+
+  window.scrollTo({top:document.getElementById('result').offsetTop-20,behavior:'smooth'});
+}
+
+function dr(key,val,cls=''){
+  return `<div class="dr"><span class="dk">${esc(key)}</span><span class="dv ${cls}">${esc(val)}</span></div>`;
+}
+
+// ── DNS BLACKLIST CHECKS ───────────────────────────────────────────────────
+const DNSBL_LIST=[
+  {name:'Spamhaus ZEN',host:'zen.spamhaus.org'},
+  {name:'Spamhaus SBL',host:'sbl.spamhaus.org'},
+  {name:'SORBS SPAM',host:'spam.sorbs.net'},
+  {name:'Barracuda',host:'b.barracudacentral.org'},
+  {name:'SpamCop',host:'bl.spamcop.net'},
+  {name:'UCEPROTECT L1',host:'dnsbl-1.uceprotect.net'},
+  {name:'Proofpoint DBL',host:'dbl.proofpoint.com'},
+  {name:'IVMURI',host:'uri.blacklist.woody.ch'},
+];
+
+async function checkBlacklists(ip){
+  const reversed=ip.split('.').reverse().join('.');
+  const grid=document.getElementById('bl-grid');
+  if(!grid) return;
+
+  grid.innerHTML='';
+  const results=await Promise.allSettled(
+    DNSBL_LIST.map(async bl=>{
+      const query=`${reversed}.${bl.host}`;
+      try{
+        const r=await fetch(`https://cloudflare-dns.com/dns-query?name=${query}&type=A`,{headers:{'accept':'application/dns-json'},signal:AbortSignal.timeout(4000)});
+        const d=await r.json();
+        const listed=d.Answer&&d.Answer.length>0&&d.Status===0;
+        return{...bl,listed};
+      }catch(e){
+        return{...bl,listed:null};
+      }
+    })
+  );
+
+  grid.innerHTML='';
+  results.forEach((r,i)=>{
+    const bl=r.value||DNSBL_LIST[i];
+    const listed=r.value?.listed;
+    const cls=listed===null?'bl-unknown':listed?'bl-hit':'bl-clean';
+    const label=listed===null?'TIMEOUT':listed?'LISTED':'CLEAN';
+    const div=document.createElement('div');
+    div.className=`bl-item ${cls}`;
+    div.innerHTML=`<div class="bl-dot"></div>${esc(bl.name)} <span style="margin-left:auto;font-size:9px">${label}</span>`;
+    grid.appendChild(div);
+  });
+}
+</script>
+</body>
+</html>
