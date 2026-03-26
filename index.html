@@ -271,18 +271,23 @@ async function fetchGeo(ip){
 }
 
 async function fetchAbuse(ip){
-  // Route through the threat-feed Netlify proxy which has the AbuseIPDB key
-  // Falls back to no abuse data if proxy unavailable
+  // Primary: AbuseIPDB check via Netlify proxy
   try{
-    const r=await fetch(`https://threat-feed.netlify.app/.netlify/functions/threats`,{signal:AbortSignal.timeout(8000)});
-    // The blacklist endpoint doesn't let us check individual IPs — use check endpoint instead
-    // Since our proxy only exposes the blacklist, we'll use ipwho.is abuse score as proxy
-    throw new Error('use fallback');
+    const r=await fetch(`https://threat-feed.netlify.app/.netlify/functions/check?ip=${encodeURIComponent(ip)}`,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error('check failed '+r.status);
+    const d=await r.json();
+    if(d.data) return {_source:'abuseipdb', ...d.data};
+    throw new Error('no data');
   }catch(e){
-    // Fallback: use ipwho.is which includes abuse scoring
-    const r=await fetch(`https://ipwho.is/${ip}`,{signal:AbortSignal.timeout(8000)});
-    if(!r.ok) throw new Error('abuse failed');
-    return await r.json();
+    // Fallback: ipwho.is for basic threat flags
+    try{
+      const r=await fetch(`https://ipwho.is/${ip}`,{signal:AbortSignal.timeout(8000)});
+      if(!r.ok) throw new Error('ipwho failed');
+      const d=await r.json();
+      return {_source:'ipwho', ...d};
+    }catch(e2){
+      return {_source:'none'};
+    }
   }
 }
 
@@ -305,20 +310,33 @@ async function fetchASN(ip){
 function computeRisk(data){
   let score=0;
   const flags=[];
+  const ab=data.abuse||{};
 
-  if(data.geo?.proxy===true){score+=40;flags.push('PROXY DETECTED')}
-  if(data.geo?.hosting===true){score+=15;flags.push('HOSTING/VPS')}
-  if(data.geo?.mobile===true){flags.push('MOBILE CARRIER')}
-  if(data.abuse?.connection?.type==='Tor'){score+=50;flags.push('TOR EXIT NODE')}
-  if(data.abuse?.threat?.is_tor){score+=50;flags.push('TOR EXIT NODE')}
-  if(data.abuse?.threat?.is_proxy){score+=30;flags.push('KNOWN PROXY')}
-  if(data.abuse?.threat?.is_vpn){score+=20;flags.push('VPN SERVICE')}
-  if(data.abuse?.threat?.is_datacenter){score+=10;flags.push('DATACENTER')}
-  if(data.abuse?.threat?.is_anonymous){score+=25;flags.push('ANONYMOUS')}
-  if(data.abuse?.threat?.is_known_attacker){score+=60;flags.push('KNOWN ATTACKER')}
-  if(data.abuse?.threat?.is_known_abuser){score+=40;flags.push('KNOWN ABUSER')}
+  // AbuseIPDB direct confidence score — most reliable signal
+  if(ab._source==='abuseipdb'){
+    const conf=ab.abuseConfidenceScore||0;
+    score=conf; // 0-100 directly from AbuseIPDB
+    if(conf>=90) flags.push('CRITICAL ABUSE SCORE');
+    else if(conf>=50) flags.push('HIGH ABUSE SCORE');
+    else if(conf>=20) flags.push('MODERATE ABUSE SCORE');
+    if(ab.totalReports>0) flags.push(`${ab.totalReports} ABUSE REPORTS`);
+    if(ab.isWhitelisted) flags.push('WHITELISTED');
+    if(ab.usageType==='Tor Exit Node'){score=Math.max(score,85);flags.push('TOR EXIT NODE')}
+    if(ab.usageType==='VPN Service'){score=Math.max(score,30);flags.push('VPN SERVICE')}
+    if(ab.isTor){score=Math.max(score,85);flags.push('TOR EXIT NODE')}
+  } else {
+    // Fallback: derive from geo + ipwho flags
+    if(data.geo?.proxy===true){score+=40;flags.push('PROXY DETECTED')}
+    if(data.geo?.hosting===true){score+=15;flags.push('HOSTING/VPS')}
+    if(ab.threat?.is_tor){score+=50;flags.push('TOR EXIT NODE')}
+    if(ab.threat?.is_proxy){score+=30;flags.push('KNOWN PROXY')}
+    if(ab.threat?.is_vpn){score+=20;flags.push('VPN SERVICE')}
+    if(ab.threat?.is_known_attacker){score+=60;flags.push('KNOWN ATTACKER')}
+    if(ab.threat?.is_known_abuser){score+=40;flags.push('KNOWN ABUSER')}
+    if(ab.connection?.type==='Tor'){score+=50;flags.push('TOR EXIT NODE')}
+  }
 
-  score=Math.min(score,100);
+  score=Math.min(Math.round(score),100);
 
   let level='CLEAN', color='#39ff14';
   if(score>=70){level='CRITICAL';color='#ff3333'}
@@ -521,25 +539,44 @@ function renderResult(data){
   html+=`</div>`;
 
   // Threat intel section
-  const threat=abuse.threat||{};
-  const hasTheatData=Object.keys(threat).length>0;
   html+=`<div class="intel-full">
-    <div class="is-title">// THREAT INTELLIGENCE</div>
+    <div class="is-title">// THREAT INTELLIGENCE <span class="is-count">${abuse._source==='abuseipdb'?'AbuseIPDB':'ipwho.is'}</span></div>
     <div class="intel-grid" style="margin-bottom:0">
       <div>
-        ${dr('Tor Exit Node',threat.is_tor!==undefined?(threat.is_tor?'YES':'NO'):'Unknown',threat.is_tor?'danger':'')}
-        ${dr('Known Proxy',threat.is_proxy!==undefined?(threat.is_proxy?'YES':'NO'):'Unknown',threat.is_proxy?'danger':'')}
-        ${dr('VPN Service',threat.is_vpn!==undefined?(threat.is_vpn?'YES':'NO'):'Unknown',threat.is_vpn?'warn':'')}
-        ${dr('Datacenter',threat.is_datacenter!==undefined?(threat.is_datacenter?'YES':'NO'):'Unknown')}
+        ${abuse._source==='abuseipdb'?`
+          ${dr('Abuse Confidence',`${abuse.abuseConfidenceScore||0}%`, abuse.abuseConfidenceScore>=50?'danger':abuse.abuseConfidenceScore>=20?'warn':'good')}
+          ${dr('Total Reports',String(abuse.totalReports||0), abuse.totalReports>0?'warn':'')}
+          ${dr('Distinct Reporters',String(abuse.numDistinctUsers||0))}
+          ${dr('Last Reported',abuse.lastReportedAt?new Date(abuse.lastReportedAt).toLocaleDateString():'Never')}
+        `:`
+          ${dr('Tor Exit Node',abuse.threat?.is_tor!==undefined?(abuse.threat.is_tor?'YES':'NO'):'Unknown',abuse.threat?.is_tor?'danger':'')}
+          ${dr('Known Proxy',abuse.threat?.is_proxy!==undefined?(abuse.threat.is_proxy?'YES':'NO'):'Unknown',abuse.threat?.is_proxy?'danger':'')}
+          ${dr('Known Attacker',abuse.threat?.is_known_attacker!==undefined?(abuse.threat.is_known_attacker?'YES':'NO'):'Unknown',abuse.threat?.is_known_attacker?'danger':'')}
+        `}
       </div>
       <div>
-        ${dr('Known Attacker',threat.is_known_attacker!==undefined?(threat.is_known_attacker?'YES':'NO'):'Unknown',threat.is_known_attacker?'danger':'')}
-        ${dr('Known Abuser',threat.is_known_abuser!==undefined?(threat.is_known_abuser?'YES':'NO'):'Unknown',threat.is_known_abuser?'danger':'')}
-        ${dr('Anonymous',threat.is_anonymous!==undefined?(threat.is_anonymous?'YES':'NO'):'Unknown',threat.is_anonymous?'warn':'')}
-        ${dr('Bogon',threat.is_bogon!==undefined?(threat.is_bogon?'YES':'NO'):'Unknown',threat.is_bogon?'warn':'')}
+        ${abuse._source==='abuseipdb'?`
+          ${dr('Usage Type',abuse.usageType||'—',abuse.usageType==='Tor Exit Node'?'danger':'')}
+          ${dr('ISP',abuse.isp||'—')}
+          ${dr('Domain',abuse.domain||'—')}
+          ${dr('Country',abuse.countryCode||'—')}
+          ${dr('Whitelisted',abuse.isWhitelisted?'YES':'NO',abuse.isWhitelisted?'good':'')}
+        `:`
+          ${dr('VPN Service',abuse.threat?.is_vpn!==undefined?(abuse.threat.is_vpn?'YES':'NO'):'Unknown',abuse.threat?.is_vpn?'warn':'')}
+          ${dr('Anonymous',abuse.threat?.is_anonymous!==undefined?(abuse.threat.is_anonymous?'YES':'NO'):'Unknown',abuse.threat?.is_anonymous?'warn':'')}
+          ${dr('Bogon',abuse.threat?.is_bogon!==undefined?(abuse.threat.is_bogon?'YES':'NO'):'Unknown',abuse.threat?.is_bogon?'warn':'')}
+        `}
       </div>
     </div>
-    ${!hasTheatData?'<div style="margin-top:8px;font-family:\'Share Tech Mono\',monospace;font-size:10px;color:var(--muted)">Detailed threat data requires ipwhois with threat module. Basic geo/proxy flags shown above.</div>':''}
+    ${abuse._source==='abuseipdb'&&abuse.reports?.length?`
+      <div style="margin-top:12px">
+        <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.15em;margin-bottom:8px">RECENT REPORTS (${abuse.reports.length})</div>
+        ${abuse.reports.slice(0,5).map(rep=>`
+          <div class="dr">
+            <span class="dk">${new Date(rep.reportedAt).toLocaleDateString()}</span>
+            <span class="dv warn">${(rep.categories||[]).map(c=>ABUSE_CATS[c]||c).join(', ')||'—'}</span>
+          </div>`).join('')}
+      </div>`:''}
   </div>`;
 
   // BGP / ASN detail
