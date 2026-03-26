@@ -265,9 +265,32 @@ async function doLookup(){
 
 // ── DATA SOURCES ───────────────────────────────────────────────────────────
 async function fetchGeo(ip){
-  const r=await fetch(`https://ip-api.com/json/${ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,reverse,mobile,proxy,hosting,query`,{signal:AbortSignal.timeout(8000)});
+  // ipapi.co is fully CORS-friendly, free tier 1000/day
+  const r=await fetch(`https://ipapi.co/${ip}/json/`,{signal:AbortSignal.timeout(8000)});
   if(!r.ok) throw new Error('geo failed');
-  return await r.json();
+  const d=await r.json();
+  if(d.error) throw new Error(d.reason||'geo error');
+  // Normalize to consistent shape
+  return {
+    status:'success',
+    country:     d.country_name,
+    countryCode: d.country_code,
+    region:      d.region_code,
+    regionName:  d.region,
+    city:        d.city,
+    zip:         d.postal,
+    lat:         d.latitude,
+    lon:         d.longitude,
+    timezone:    d.timezone,
+    isp:         d.org,
+    org:         d.org,
+    as:          d.asn ? d.asn+' '+d.org : null,
+    asname:      d.org,
+    proxy:       false,
+    hosting:     false,
+    mobile:      false,
+    query:       ip,
+  };
 }
 
 async function fetchAbuse(ip){
